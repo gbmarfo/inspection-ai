@@ -10,6 +10,7 @@ import { ImagesPanel } from './components/ImagesPanel'
 import { ModelsPanel } from './components/ModelsPanel'
 import { OverviewPanel } from './components/OverviewPanel'
 import { AssetsPanel } from './components/AssetsPanel'
+import { AssetClassesPanel } from './components/AssetClassesPanel'
 import { SchedulePanel } from './components/SchedulePanel'
 import { ReportsPanel } from './components/ReportsPanel'
 import { ServiceRequestsPanel } from './components/ServiceRequestsPanel'
@@ -349,20 +350,22 @@ function App() {
           </div>
         )}
 
-        <TopBar
-          activeTab={activeTab}
-          onTabChange={setActiveTab}
-          showLabels={showLabels}
-          onToggleLabels={() => setShowLabels((value) => !value)}
-          focusTitle={activeImage?.name}
-          focusMeta={
-            activeTab === 'AI Processing' && images.length
-              ? `${activeIndex + 1} / ${images.length}`
-              : undefined
-          }
-          onPrevious={activeTab === 'AI Processing' ? () => goTo(activeIndex - 1) : undefined}
-          onNext={activeTab === 'AI Processing' ? () => goTo(activeIndex + 1) : undefined}
-        />
+        {activeTab !== 'Overview' && (
+          <TopBar
+            activeTab={activeTab}
+            onTabChange={setActiveTab}
+            showLabels={showLabels}
+            onToggleLabels={() => setShowLabels((value) => !value)}
+            focusTitle={activeImage?.name}
+            focusMeta={
+              activeTab === 'AI Processing' && images.length
+                ? `${activeIndex + 1} / ${images.length}`
+                : undefined
+            }
+            onPrevious={activeTab === 'AI Processing' ? () => goTo(activeIndex - 1) : undefined}
+            onNext={activeTab === 'AI Processing' ? () => goTo(activeIndex + 1) : undefined}
+          />
+        )}
 
         {activeTab === 'Overview' ? (
           <OverviewPanel stats={overview} loading={overviewLoading} />
@@ -373,6 +376,10 @@ function App() {
             onSelectAsset={handleSelectAsset}
             onOpenImage={handleOpenAssetImage}
             onAssetsChanged={() => api.getAssets().then(setAssets).catch(() => undefined)}
+          />
+        ) : activeTab === 'Asset Classes' ? (
+          <AssetClassesPanel
+            onChanged={() => api.getAssets().then(setAssets).catch(() => undefined)}
           />
         ) : activeTab === 'Schedule' ? (
           <SchedulePanel

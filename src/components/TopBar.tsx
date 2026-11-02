@@ -4,6 +4,7 @@ import type { NavTab } from '../types'
 const tabs: NavTab[] = [
   'Overview',
   'Assets',
+  'Asset Classes',
   'Schedule',
   'Images',
   'AI Processing',

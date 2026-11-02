@@ -131,15 +131,19 @@ def init_database() -> None:
         _migrate_service_requests(conn)
         _migrate_media(conn)
         _migrate_inspection_schedules(conn)
+        _migrate_asset_classes(conn)
         from .seed import ensure_sample_schedules, ensure_sample_video
+        from .services.asset_classes import ensure_sample_asset_classes
 
         ensure_sample_video(conn)
         ensure_sample_schedules(conn)
+        ensure_sample_asset_classes(conn)
         count = conn.execute("SELECT COUNT(*) FROM images").fetchone()[0]
         if count == 0:
             from .seed import seed_database
 
             seed_database(conn)
+            ensure_sample_asset_classes(conn)
 
 
 def _migrate_folders(conn: sqlite3.Connection) -> None:
@@ -210,6 +214,39 @@ def _migrate_inspection_schedules(conn: sqlite3.Connection) -> None:
         )
         """
     )
+
+
+def _migrate_asset_classes(conn: sqlite3.Connection) -> None:
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS asset_classes (
+          id TEXT PRIMARY KEY,
+          name TEXT NOT NULL,
+          description TEXT,
+          category TEXT,
+          created_at TEXT NOT NULL DEFAULT (datetime('now'))
+        )
+        """
+    )
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS checklist_items (
+          id TEXT PRIMARY KEY,
+          class_id TEXT NOT NULL,
+          label TEXT NOT NULL,
+          description TEXT,
+          required INTEGER NOT NULL DEFAULT 1,
+          sort_order INTEGER NOT NULL DEFAULT 0,
+          severity_hint TEXT,
+          FOREIGN KEY (class_id) REFERENCES asset_classes(id) ON DELETE CASCADE
+        )
+        """
+    )
+    structure_cols = {row[1] for row in conn.execute("PRAGMA table_info(structures)")}
+    if "class_id" not in structure_cols:
+        conn.execute(
+            "ALTER TABLE structures ADD COLUMN class_id TEXT REFERENCES asset_classes(id) ON DELETE SET NULL"
+        )
 
 
 def _migrate_service_requests(conn: sqlite3.Connection) -> None:

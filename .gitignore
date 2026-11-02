@@ -14,7 +14,9 @@ dist-ssr
 backend/data
 backend/.venv
 backend/Ultralytics
+backend/weights/
 *.pt
+*.pth
 __pycache__/
 *.py[cod]
 server/data

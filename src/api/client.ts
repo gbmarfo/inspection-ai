@@ -9,7 +9,9 @@ import type {
   ServiceRequest,
   ServiceRequestStatus,
   Asset,
+  AssetClass,
   AssetDetail,
+  ChecklistItem,
   InspectionSchedule,
   InspectionSchedulePriority,
   InspectionScheduleStatus,
@@ -29,7 +31,14 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     const response = await fetch(`${API}${path}`, { ...init, signal: controller.signal })
     if (!response.ok) {
       const error = await response.json().catch(() => ({ error: response.statusText }))
-      throw new Error(error.error ?? 'Request failed')
+      const detail = error.detail
+      const message =
+        typeof detail === 'string'
+          ? detail
+          : Array.isArray(detail)
+            ? detail.map((item: { msg?: string }) => item.msg).filter(Boolean).join('; ')
+            : error.error
+      throw new Error(message || response.statusText || 'Request failed')
     }
     if (response.status === 204) return undefined as T
     return response.json() as Promise<T>
@@ -100,6 +109,27 @@ export const api = {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ modelId: modelId ?? null }),
     }),
+  interactiveSegment: (
+    id: string,
+    payload: {
+      clicks: Array<{ x: number; y: number; label: 1 | -1 }>
+      previousPoints?: [number, number][]
+    },
+  ) =>
+    request<{
+      points: [number, number][]
+      x: number
+      y: number
+      width: number
+      height: number
+      engine: string
+      previewMaskBase64?: string
+      clickCount: number
+    }>(`/images/${id}/interactive-segment`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    }),
   createAnnotation: (imageId: string, box: BoundingBox) =>
     request<InspectionImage>(`/images/${imageId}/annotations`, {
       method: 'POST',
@@ -125,6 +155,66 @@ export const api = {
     request<InspectionImage>(`/images/${imageId}/annotations/${annotationId}`, { method: 'DELETE' }),
   getAssets: () => request<Asset[]>('/assets'),
   getAsset: (id: string) => request<AssetDetail>(`/assets/${id}`),
+  updateAsset: (
+    id: string,
+    patch: Partial<{ classId: string | null; name: string; type: string; status: string }>,
+  ) =>
+    request<AssetDetail>(`/assets/${id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(patch),
+    }),
+  getAssetClasses: () => request<AssetClass[]>('/asset-classes'),
+  getAssetClass: (id: string) => request<AssetClass>(`/asset-classes/${id}`),
+  createAssetClass: (payload: { name: string; description?: string; category?: string }) =>
+    request<AssetClass>('/asset-classes', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    }),
+  updateAssetClass: (
+    id: string,
+    patch: Partial<{ name: string; description: string; category: string }>,
+  ) =>
+    request<AssetClass>(`/asset-classes/${id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(patch),
+    }),
+  deleteAssetClass: (id: string) => request<void>(`/asset-classes/${id}`, { method: 'DELETE' }),
+  createChecklistItem: (
+    classId: string,
+    payload: {
+      label: string
+      description?: string
+      required?: boolean
+      severityHint?: string | null
+      sortOrder?: number
+    },
+  ) =>
+    request<ChecklistItem>(`/asset-classes/${classId}/checklist-items`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    }),
+  updateChecklistItem: (
+    classId: string,
+    itemId: string,
+    patch: Partial<{
+      label: string
+      description: string
+      required: boolean
+      severityHint: string | null
+      sortOrder: number
+    }>,
+  ) =>
+    request<ChecklistItem>(`/asset-classes/${classId}/checklist-items/${itemId}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(patch),
+    }),
+  deleteChecklistItem: (classId: string, itemId: string) =>
+    request<void>(`/asset-classes/${classId}/checklist-items/${itemId}`, { method: 'DELETE' }),
   getInspectionSchedules: () => request<InspectionSchedule[]>('/assets/inspection-schedules'),
   createInspectionSchedule: (payload: {
     assetId: string

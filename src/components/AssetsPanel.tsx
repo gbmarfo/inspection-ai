@@ -1,8 +1,8 @@
-import { Fragment, useRef, useState } from 'react'
+import { Fragment, useEffect, useRef, useState } from 'react'
 import { ChevronDown, ChevronRight, List, Map as MapIcon, MapPin, Upload } from 'lucide-react'
 import { api } from '../api/client'
 import { AssetsMap } from './AssetsMap'
-import type { Asset, AssetDetail, InspectionImage } from '../types'
+import type { Asset, AssetClass, AssetDetail, InspectionImage } from '../types'
 
 type AssetsPanelProps = {
   assets: Asset[]
@@ -44,6 +44,15 @@ export function AssetsPanel({
   const [importing, setImporting] = useState(false)
   const [defaultType, setDefaultType] = useState('Distribution pole')
   const [importMessage, setImportMessage] = useState<string | null>(null)
+  const [classes, setClasses] = useState<AssetClass[]>([])
+  const [assigningClass, setAssigningClass] = useState(false)
+
+  useEffect(() => {
+    void api
+      .getAssetClasses()
+      .then(setClasses)
+      .catch(() => setClasses([]))
+  }, [assets])
 
   const toggleExpand = async (assetId: string) => {
     if (expandedId === assetId) {
@@ -79,6 +88,19 @@ export function AssetsPanel({
     }
   }
 
+  const handleAssignClass = async (assetId: string, classId: string) => {
+    setAssigningClass(true)
+    try {
+      const updated = await api.updateAsset(assetId, { classId: classId || null })
+      setDetail(updated)
+      await onAssetsChanged()
+    } catch (err) {
+      setImportMessage(err instanceof Error ? err.message : 'Failed to assign asset class')
+    } finally {
+      setAssigningClass(false)
+    }
+  }
+
   if (loading) {
     return (
       <section className="placeholder-panel">
@@ -93,8 +115,8 @@ export function AssetsPanel({
         <div>
           <h2>Assets</h2>
           <p>
-            Transmission towers, distribution poles, and other field assets. Import from shapefile or
-            associate inspection images to link photos to each asset.
+            Transmission towers, distribution poles, and other field assets. Assign an asset class to
+            attach its inspection checklist.
           </p>
         </div>
         <div className="assets-header-actions">
@@ -165,7 +187,7 @@ export function AssetsPanel({
                     onClick={() => setSelectedMapId(asset.id)}
                   >
                     <strong>{asset.name}</strong>
-                    <span>{asset.type}</span>
+                    <span>{asset.className || asset.type}</span>
                     <span>
                       {formatDate(asset.nextInspectionAt)} · {inspectionLabel(asset.inspectionStatus)}
                     </span>
@@ -183,6 +205,7 @@ export function AssetsPanel({
                 <th />
                 <th>Name</th>
                 <th>Type</th>
+                <th>Class</th>
                 <th>Status</th>
                 <th>Next inspection</th>
                 <th>Images</th>
@@ -195,6 +218,8 @@ export function AssetsPanel({
                 const expanded = expandedId === asset.id
                 const images =
                   expanded && detail?.id === asset.id ? detail.images : ([] as InspectionImage[])
+                const checklist =
+                  expanded && detail?.id === asset.id ? (detail.checklist ?? []) : []
 
                 return (
                   <Fragment key={asset.id}>
@@ -214,6 +239,7 @@ export function AssetsPanel({
                         <strong>{asset.name}</strong>
                       </td>
                       <td>{asset.type}</td>
+                      <td>{asset.className || '—'}</td>
                       <td>
                         <span className="status-pill status-clear">{asset.status}</span>
                       </td>
@@ -246,38 +272,97 @@ export function AssetsPanel({
                     </tr>
                     {expanded && (
                       <tr className="asset-detail-row">
-                        <td colSpan={8}>
+                        <td colSpan={9}>
                           {detailLoading ? (
-                            <p className="asset-detail-loading">Loading linked images…</p>
-                          ) : images.length === 0 ? (
-                            <div className="asset-detail-empty">
-                              <p>No images linked to this asset.</p>
-                              <button
-                                type="button"
-                                className="card-btn primary"
-                                onClick={() => onSelectAsset(asset.id)}
-                              >
-                                Assign images
-                              </button>
-                            </div>
+                            <p className="asset-detail-loading">Loading asset details…</p>
                           ) : (
-                            <div className="asset-images-grid">
-                              {images.map((image) => (
-                                <article key={image.id} className="asset-image-card">
-                                  <img src={image.src} alt={image.name} loading="lazy" />
-                                  <div>
-                                    <strong>{image.name}</strong>
-                                    <span>{image.boxes.length} labels</span>
+                            <div className="asset-detail-panels">
+                              <div className="asset-detail-block">
+                                <div className="asset-detail-block-head">
+                                  <h4>Inspection checklist</h4>
+                                  <label className="asset-class-assign">
+                                    <span>Asset class</span>
+                                    <select
+                                      value={detail?.classId ?? ''}
+                                      disabled={assigningClass}
+                                      onChange={(event) =>
+                                        void handleAssignClass(asset.id, event.target.value)
+                                      }
+                                    >
+                                      <option value="">No class</option>
+                                      {classes.map((entry) => (
+                                        <option key={entry.id} value={entry.id}>
+                                          {entry.name}
+                                        </option>
+                                      ))}
+                                    </select>
+                                  </label>
+                                </div>
+                                {checklist.length === 0 ? (
+                                  <p className="checklist-empty">
+                                    No checklist yet. Assign a class, or create one under Asset
+                                    Classes.
+                                  </p>
+                                ) : (
+                                  <ol className="checklist-items compact">
+                                    {checklist.map((item, index) => (
+                                      <li key={item.id}>
+                                        <div className="checklist-item-main">
+                                          <span className="checklist-index">{index + 1}</span>
+                                          <div>
+                                            <strong>
+                                              {item.label}
+                                              {item.required ? (
+                                                <em className="checklist-required">Required</em>
+                                              ) : (
+                                                <em className="checklist-optional">Optional</em>
+                                              )}
+                                            </strong>
+                                            {item.description ? <p>{item.description}</p> : null}
+                                          </div>
+                                        </div>
+                                      </li>
+                                    ))}
+                                  </ol>
+                                )}
+                              </div>
+
+                              <div className="asset-detail-block">
+                                <div className="asset-detail-block-head">
+                                  <h4>Linked images</h4>
+                                </div>
+                                {images.length === 0 ? (
+                                  <div className="asset-detail-empty">
+                                    <p>No images linked to this asset.</p>
+                                    <button
+                                      type="button"
+                                      className="card-btn primary"
+                                      onClick={() => onSelectAsset(asset.id)}
+                                    >
+                                      Assign images
+                                    </button>
                                   </div>
-                                  <button
-                                    type="button"
-                                    className="card-btn primary"
-                                    onClick={() => onOpenImage(image.id)}
-                                  >
-                                    Open
-                                  </button>
-                                </article>
-                              ))}
+                                ) : (
+                                  <div className="asset-images-grid">
+                                    {images.map((image) => (
+                                      <article key={image.id} className="asset-image-card">
+                                        <img src={image.src} alt={image.name} loading="lazy" />
+                                        <div>
+                                          <strong>{image.name}</strong>
+                                          <span>{image.boxes.length} labels</span>
+                                        </div>
+                                        <button
+                                          type="button"
+                                          className="card-btn primary"
+                                          onClick={() => onOpenImage(image.id)}
+                                        >
+                                          Open
+                                        </button>
+                                      </article>
+                                    ))}
+                                  </div>
+                                )}
+                              </div>
                             </div>
                           )}
                         </td>
