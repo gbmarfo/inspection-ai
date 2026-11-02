@@ -6,6 +6,7 @@ from pydantic import BaseModel
 
 from ..database import get_connection
 from ..mappers import map_annotation, map_image
+from ..services.asset_classes import get_asset_class
 from ..services.inspection_schedules import derive_schedule_status, map_inspection_schedule
 from ..services.shapefile_import import iter_shapefile_features
 
@@ -28,6 +29,13 @@ class InspectionSchedulePatch(BaseModel):
     notes: Optional[str] = None
 
 
+class AssetPatch(BaseModel):
+    classId: Optional[str] = None
+    name: Optional[str] = None
+    type: Optional[str] = None
+    status: Optional[str] = None
+
+
 def _map_asset(row, image_count: int, next_schedule: Optional[dict] = None) -> dict:
     mapped = {
         "id": row["id"],
@@ -37,6 +45,8 @@ def _map_asset(row, image_count: int, next_schedule: Optional[dict] = None) -> d
         "lng": row["lng"],
         "status": row["status"],
         "imageCount": image_count,
+        "classId": row["class_id"] if "class_id" in row.keys() else None,
+        "className": row["class_name"] if "class_name" in row.keys() else None,
     }
     if next_schedule:
         mapped["nextInspectionAt"] = next_schedule["scheduled_at"]
@@ -181,8 +191,9 @@ def list_assets():
     try:
         rows = conn.execute(
             """
-            SELECT s.*, COUNT(i.id) as image_count
+            SELECT s.*, ac.name AS class_name, COUNT(i.id) as image_count
             FROM structures s
+            LEFT JOIN asset_classes ac ON ac.id = s.class_id
             LEFT JOIN images i ON i.structure_id = s.id
             GROUP BY s.id
             ORDER BY s.name
@@ -193,14 +204,56 @@ def list_assets():
         conn.close()
 
 
+@router.patch("/{asset_id}")
+def update_asset(asset_id: str, body: AssetPatch):
+    conn = get_connection()
+    try:
+        row = conn.execute("SELECT * FROM structures WHERE id = ?", (asset_id,)).fetchone()
+        if not row:
+            raise HTTPException(status_code=404, detail="Asset not found")
+
+        updates = body.model_dump(exclude_unset=True)
+        if "classId" in updates:
+            class_id = updates["classId"]
+            if class_id:
+                exists = conn.execute(
+                    "SELECT id FROM asset_classes WHERE id = ?", (class_id,)
+                ).fetchone()
+                if not exists:
+                    raise HTTPException(status_code=400, detail="Asset class not found")
+            conn.execute("UPDATE structures SET class_id = ? WHERE id = ?", (class_id, asset_id))
+
+        if "name" in updates and updates["name"]:
+            conn.execute(
+                "UPDATE structures SET name = ? WHERE id = ?",
+                (updates["name"].strip(), asset_id),
+            )
+        if "type" in updates and updates["type"]:
+            conn.execute(
+                "UPDATE structures SET type = ? WHERE id = ?",
+                (updates["type"].strip(), asset_id),
+            )
+        if "status" in updates and updates["status"]:
+            conn.execute(
+                "UPDATE structures SET status = ? WHERE id = ?",
+                (updates["status"].strip(), asset_id),
+            )
+
+        conn.commit()
+    finally:
+        conn.close()
+    return get_asset(asset_id)
+
+
 @router.get("/{asset_id}")
 def get_asset(asset_id: str):
     conn = get_connection()
     try:
         row = conn.execute(
             """
-            SELECT s.*, COUNT(i.id) as image_count
+            SELECT s.*, ac.name AS class_name, COUNT(i.id) as image_count
             FROM structures s
+            LEFT JOIN asset_classes ac ON ac.id = s.class_id
             LEFT JOIN images i ON i.structure_id = s.id
             WHERE s.id = ?
             GROUP BY s.id
@@ -233,10 +286,14 @@ def get_asset(asset_id: str):
             (asset_id,),
         ).fetchall()
 
+        class_id = row["class_id"] if "class_id" in row.keys() else None
+        asset_class = get_asset_class(conn, class_id) if class_id else None
         return {
             **_map_asset(row, row["image_count"], _next_schedule_for_asset(conn, asset_id)),
             "images": mapped_images,
             "inspectionSchedules": [map_inspection_schedule(schedule) for schedule in schedules],
+            "assetClass": asset_class,
+            "checklist": asset_class["checklist"] if asset_class else [],
         }
     finally:
         conn.close()

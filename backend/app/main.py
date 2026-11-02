@@ -10,7 +10,7 @@ from fastapi.staticfiles import StaticFiles
 
 from .config import DIST_DIR, PUBLIC_DIR
 from .database import get_connection, init_database
-from .routers import assets, folders, images, models, overview, reports, service_requests
+from .routers import asset_classes, assets, folders, images, models, overview, reports, service_requests
 from .services.training import stop_all_training_timers
 from .storage import MinioStorage, storage
 
@@ -53,6 +53,7 @@ app.include_router(overview.router)
 app.include_router(images.router)
 app.include_router(folders.router)
 app.include_router(assets.router)
+app.include_router(asset_classes.router)
 app.include_router(models.router)
 app.include_router(reports.router)
 app.include_router(service_requests.router)

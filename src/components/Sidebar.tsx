@@ -4,6 +4,7 @@ import {
   ChevronLeft,
   ChevronRight,
   CalendarDays,
+  CheckSquare,
   ClipboardList,
   FileText,
   Images,
@@ -34,6 +35,7 @@ const sections: SidebarSection[] = [
     title: 'Inspection',
     items: [
       { icon: MapPinned, label: 'Assets', tab: 'Assets' },
+      { icon: CheckSquare, label: 'Asset Classes', tab: 'Asset Classes' },
       { icon: Images, label: 'Images', tab: 'Images' },
       { icon: ScanEye, label: 'AI Processing', tab: 'AI Processing' },
     ],

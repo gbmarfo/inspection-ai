@@ -49,6 +49,7 @@ export type ImageFolder = {
 export type NavTab =
   | 'Overview'
   | 'Assets'
+  | 'Asset Classes'
   | 'Schedule'
   | 'Images'
   | 'Models'
@@ -81,14 +82,39 @@ export type Asset = {
   lng: number
   status: string
   imageCount: number
+  classId?: string | null
+  className?: string | null
   nextInspectionAt?: string
   inspectionStatus?: InspectionScheduleStatus
   inspectionPriority?: InspectionSchedulePriority
 }
 
+export type ChecklistItem = {
+  id: string
+  classId: string
+  label: string
+  description: string
+  required: boolean
+  sortOrder: number
+  severityHint?: string | null
+}
+
+export type AssetClass = {
+  id: string
+  name: string
+  description: string
+  category: string
+  createdAt: string
+  itemCount: number
+  assetCount: number
+  checklist: ChecklistItem[]
+}
+
 export type AssetDetail = Asset & {
   images: InspectionImage[]
   inspectionSchedules?: InspectionSchedule[]
+  assetClass?: AssetClass | null
+  checklist?: ChecklistItem[]
 }
 
 export type OverviewStatusBreakdown = {

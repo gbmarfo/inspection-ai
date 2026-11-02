@@ -11,6 +11,7 @@ from pydantic import BaseModel
 from ..database import get_connection
 from ..mappers import get_all_images, get_image_by_id
 from ..services.inference import run_mock_inference
+from ..services.interactive_segment import InteractiveSegmentError, run_interactive_segmentation
 from ..services.video_frames import FrameExtractionError, extract_annotated_frames
 from ..storage import MinioStorage, storage
 
@@ -49,6 +50,17 @@ class AnnotationPatch(BaseModel):
 
 class InferRequest(BaseModel):
     modelId: Optional[str] = None
+
+
+class SegmentClick(BaseModel):
+    x: float
+    y: float
+    label: int  # 1 = positive / foreground, -1 = negative / background
+
+
+class InteractiveSegmentRequest(BaseModel):
+    clicks: list[SegmentClick]
+    previousPoints: Optional[list[list[float]]] = None
 
 
 class ImagePatch(BaseModel):
@@ -235,6 +247,36 @@ def extract_video_frames(image_id: str):
             raise HTTPException(status_code=400, detail=str(exc)) from exc
 
         return {"extracted": len(created), "images": created}
+    finally:
+        conn.close()
+
+
+@router.post("/{image_id}/interactive-segment")
+def interactive_segment(image_id: str, body: InteractiveSegmentRequest):
+    """RITM-style click interactive segmentation (pos/neg clicks → polygon mask)."""
+    conn = get_connection()
+    try:
+        image = get_image_by_id(conn, image_id)
+        if not image:
+            raise HTTPException(status_code=404, detail="Image not found")
+        if image.get("mediaType") == "video":
+            raise HTTPException(
+                status_code=400,
+                detail="Interactive segmentation is only available for still images",
+            )
+        row = conn.execute("SELECT file_path FROM images WHERE id = ?", (image_id,)).fetchone()
+        if not row:
+            raise HTTPException(status_code=404, detail="Image not found")
+
+        try:
+            result = run_interactive_segmentation(
+                file_path=row["file_path"],
+                clicks=[click.model_dump() for click in body.clicks],
+                previous_points=body.previousPoints,
+            )
+        except InteractiveSegmentError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        return result
     finally:
         conn.close()
 
