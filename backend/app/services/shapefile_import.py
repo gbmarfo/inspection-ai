@@ -36,7 +36,7 @@ def _records_as_dicts(reader: shapefile.Reader) -> list[dict[str, Any]]:
     return [dict(zip(fields, record)) for record in reader.records()]
 
 
-def _lat_lng_from_shape(shape: shapefile._Shape) -> tuple[float, float]:
+def _lat_lng_from_shape(shape: shapefile.Shape) -> tuple[float, float]:
     if not shape.points:
         raise ValueError("Geometry has no coordinates")
 
